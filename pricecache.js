@@ -17,10 +17,10 @@ PriceCache.prototype.initialize = function(stocksToGrab, bot)
     }
     stocksToGrab.forEach(function(k)
     {
-        get.concat('https://api.iextrading.com/1.0/stock/' + k + '/price', function (err, res, data) {
+        get.concat(getStockRetrievalUrl(k), function (err, res, data) {
           if (err) throw err
           var val = parseFloat(data.toString());
-          assetPriceMap[k] = new asset.Asset(asset.AssetType.STOCK, k ,val);
+          assetPriceMap[k] = new asset.Asset(asset.AssetType.STOCK, k ,val, val);
           stocksLeft--;
           if(stocksLeft == 0)
           {
@@ -34,5 +34,10 @@ PriceCache.prototype.getStockPrice = function(stockName)
 {
     return assetPriceMap[stockName].amount;
 };
+
+function getStockRetrievalUrl(stockName)
+{
+    return ('https://api.iextrading.com/1.0/stock/' + stockName + '/price')
+}
 
 module.exports = PriceCache;

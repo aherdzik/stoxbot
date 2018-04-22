@@ -1,27 +1,13 @@
 const Telegraf = require('telegraf')
 const PriceCache = require('./pricecache.js')
+const assetDef = require('./asset.js')
 var stockMap = new Map();
 var prices = {};
 const fs = require('fs');
 var telegramAuth = "";
 var dbLocation = "";
 var bot = "";
-
-var AssetType = Object.freeze({
-    "CASH" : 1,
-    "STOCK" : 2,
-    "OPTION" : 3,
-    "CRYPTO" : 4
-});
-
-class Asset 
-{
-  constructor(assetType, name, amount) {
-    this.assetType = assetType;
-    this.name = name;
-    this.amount = amount;
-  }
-}
+var baseMoney = 100000.0;
 
 function readInArgs()
 {
@@ -49,6 +35,8 @@ bot.on('text', (ctx) => {
     var id = msg.from.id;
     var msgText = msg.text;
     console.log(username + "(" + id + "): " + msgText);
+    
+    joinAutomatically(username);
     var splitStr= msgText.split(" ");
     if(splitStr[0] == "/stox")
     {
@@ -105,15 +93,12 @@ function showScores(ctx){
     ctx.reply(toReturn);
 }
 
-function joinGame(ctx){
-    var username = ctx.message.from.username;
-    if(stockMap[username] != null){
-        ctx.reply(username + " already has an account with us.");
-    }
-    else
+function joinAutomatically(username)
+{
+    if(stockMap[username] == null)
     {
-        stockMap[username] = [new Asset(AssetType.CASH,"CASH",100000.00)];
-        ctx.reply(username + " now has an account with Stox worth " + getPortfolioValueByUsername(username) + ".");
+        stockMap[username] = [new Asset(AssetType.CASH,"CASH",baseMoney, 0)];
+        console.log(username + " ADDED AUTOMATICALLY")
         writeData();
     }
 }
@@ -123,11 +108,11 @@ function getPortfolioValueByUsername(username)
     var currentVal= 0.0;
     stockMap[username].forEach(function(asset) 
     {
-        if(asset.assetType == AssetType.CASH)
+        if(asset.assetType == assetDef.AssetType.CASH)
         {
             currentVal += asset.amount;
         }
-        else if(asset.assetType == AssetType.STOCK)
+        else if(asset.assetType == assetDef.AssetType.STOCK)
         {
             currentVal += (parseFloat(asset.amount) * parseFloat(prices.getStockPrice(asset.name)));
         }
@@ -149,7 +134,7 @@ function readInAllStocks()
     {
         stockMap[k].forEach(function(asset) 
         {
-            if(asset.assetType == AssetType.STOCK)
+            if(asset.assetType == assetDef.AssetType.STOCK)
             {
                 if(!stocksToGrab.includes(asset.name))
                 {

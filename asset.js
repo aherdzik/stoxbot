@@ -7,10 +7,11 @@ var AssetType = Object.freeze({
 
 class Asset 
 {
-  constructor(assetType, name, amount) {
+  constructor(assetType, name, amount, originalPrice) {
     this.assetType = assetType;
     this.name = name;
     this.amount = amount;
+    this.originalPrice = originalPrice;
   }
 }
 
