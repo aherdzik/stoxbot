@@ -1,0 +1,11 @@
+{
+  "name": "jojostocks",
+  "version": "1.0.0",
+  "description": "Jojo stocks",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Alex Herdzik",
+  "license": "ISC"
+}
