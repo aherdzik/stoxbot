@@ -1,8 +1,8 @@
 const Telegraf = require('telegraf')
+const PriceCache = require('./pricecache.js')
 var stockMap = new Map();
-var assetPriceMap = {};
+var prices = {};
 const fs = require('fs');
-const get = require('simple-get');
 var telegramAuth = "";
 var dbLocation = "";
 var bot = "";
@@ -33,18 +33,11 @@ function readInArgs()
             dbLocation = process.argv[j+1];
             break;
             case "-at":
-            bot = Telegraf.bot(process.argv[j+1]);
+            bot = new Telegraf(process.argv[j+1]);
             break;
             default:
             break;
         }
-    }
-    
-    try{
-    stockMap = require("./" + dbLocation); 
-    }catch(err){
-        console.log(err.message + ". Assuming db isn't found/didn't work, creating a new one.");
-        writeData();
     }
 }
 
@@ -59,8 +52,6 @@ bot.on('text', (ctx) => {
     var splitStr= msgText.split(" ");
     if(splitStr[0] == "/stox")
     {
-        writeData();
-        
         if(splitStr.length == 1)
             return;
         var restOfStuff = splitStr.slice(2);
@@ -88,8 +79,8 @@ bot.on('text', (ctx) => {
             break;
             
         }
+        writeData();
     }
-    
 })
 
 function printHelp(ctx){
@@ -138,37 +129,10 @@ function getPortfolioValueByUsername(username)
         }
         else if(asset.assetType == AssetType.STOCK)
         {
-            currentVal += (parseFloat(asset.amount) * parseFloat(assetPriceMap[asset.name].amount));
+            currentVal += (parseFloat(asset.amount) * parseFloat(prices.getStockPrice(asset.name)));
         }
     });
     return currentVal;
-}
-
-function readInArgs()
-{
-    for (let j= 2; j< process.argv.length; j+=2)
-    {
-        switch(process.argv[j])
-        {
-            case "-db":
-            dbLocation = process.argv[j+1];
-            break;
-            case "-at":
-            bot = new Telegraf(process.argv[j+1]);
-            break;
-            default:
-            break;
-        }
-    }
-    
-    try
-    {
-        stockMap = require("./" + dbLocation); 
-    }catch(err)
-    {
-        console.log(err.message + ". Assuming db isn't found/didn't work, creating a new one.");
-        writeData();
-    }
 }
 
 function writeData()
@@ -178,11 +142,7 @@ function writeData()
 
 function readInAllStocks()
 {
-    if(dbLocation == "")
-    {
-        console.log("ERROR: DBLOCATION NOT INITIALIZED");
-        return;
-    }
+    stockMap = JSON.parse(fs.readFileSync("./" + dbLocation));
     
     var stocksToGrab = [];
     Object.keys(stockMap).forEach(function(k)
@@ -199,20 +159,8 @@ function readInAllStocks()
         }); 
     });
     
-    stocksToGrab.forEach(function(k)
-    {
-        console.log("GRABBING PRICES FOR: " + k);
-        get.concat('https://api.iextrading.com/1.0/stock/' + k + '/price', function (err, res, data) {
-          if (err) throw err
-          var val = parseFloat(data.toString());
-          assetPriceMap[k] = new Asset(AssetType.STOCK,k,val);
-        })
-    });
+    prices = new PriceCache();
+    prices.initialize(stocksToGrab, bot);
 }
 
 readInAllStocks();
-
-if(bot != "")
-{
-    bot.startPolling()
-}
