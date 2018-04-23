@@ -75,8 +75,21 @@ function printHelp(ctx){
     ctx.reply("HELP NOT YET IMPLEMENTED, YELL AT ALEX");
 }
 
-function buyStock(ctx, params){
-    ctx.reply("BUYING STOCKS NOT ALLOWED ALEX PLS ADD CONTENT");
+function buyStock(ctx, params)
+{
+    if(params.length !=2)
+    {
+        console.log("BUY FAILED: INVALID NUMBER OF PARAMETERS")
+        return;
+    }
+    
+    prices.buyStockWithCallback(buyStockCallBack,ctx,params[0],params[1]);
+}
+
+function buyStockCallBack(ctx, name, amount, price)
+{
+    console.log(name + " " + amount + " " +price);
+    
 }
 
 function sellStock(ctx, params){
@@ -97,7 +110,7 @@ function joinAutomatically(username)
 {
     if(stockMap[username] == null)
     {
-        stockMap[username] = [new Asset(AssetType.CASH,"CASH",baseMoney, 0)];
+        stockMap[username] = [new assetDef.Asset(assetDef.AssetType.CASH,"CASH",baseMoney, 0)];
         console.log(username + " ADDED AUTOMATICALLY")
         writeData();
     }

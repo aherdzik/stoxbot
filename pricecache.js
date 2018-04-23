@@ -18,7 +18,7 @@ PriceCache.prototype.updateCache = function()
           var val = parseFloat(data.toString());
           assetPriceMap[k] = new asset.Asset(asset.AssetType.STOCK, k ,val, val);
           console.log("NEW PRICE FOR "+ k + ": " + val);
-        })
+        });
     });
 };
 
@@ -41,13 +41,31 @@ PriceCache.prototype.initialize = function(stocksToGrab, bot)
           {
              bot.startPolling();
           }
-        })
+        });
     });
 };
 
 PriceCache.prototype.getStockPrice = function(stockName) 
 {
     return assetPriceMap[stockName].amount;
+};
+
+PriceCache.prototype.buyStockWithCallback = function(functionCallback,ctx,name,amount)
+{
+    if(assetPriceMap[name] == null)
+    {
+          get.concat(getStockRetrievalUrl(name), function (err, res, data) {
+              if (err) throw err
+              var val = parseFloat(data.toString());
+              assetPriceMap[name] = new asset.Asset(asset.AssetType.STOCK, name ,val, val);
+              console.log("BUY PRICE FOR "+ name + ": " + val);
+              functionCallback(ctx,name,amount,assetPriceMap[name].amount);
+          });
+    }
+    else
+    {
+        functionCallback(ctx,name,amount,assetPriceMap[name].amount);
+    }
 };
 
 function getStockRetrievalUrl(stockName)
