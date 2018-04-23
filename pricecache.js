@@ -35,7 +35,7 @@ PriceCache.prototype.initialize = function(stocksToGrab, bot)
         get.concat(getStockRetrievalUrl(k), function (err, res, data) {
           if (err) throw err
           var val = parseFloat(data.toString());
-          assetPriceMap[k] = new asset.Asset(asset.AssetType.STOCK, k ,val, val);
+          assetPriceMap[k.toUpperCase()] = new asset.Asset(asset.AssetType.STOCK, k.toUpperCase() ,val, val);
           stocksLeft--;
           if(stocksLeft == 0)
           {
@@ -50,15 +50,28 @@ PriceCache.prototype.getStockPrice = function(stockName)
     return assetPriceMap[stockName].amount;
 };
 
-PriceCache.prototype.buyStockWithCallback = function(functionCallback,ctx,name,amount)
+PriceCache.prototype.getStockWithCallback = function(functionCallback,ctx,name,amount)
 {
+    name = String(name).toUpperCase();
+    
+    while(name.charAt(0) === '$')
+    {
+        name = name.substr(1);
+    }
+    
     if(assetPriceMap[name] == null)
     {
           get.concat(getStockRetrievalUrl(name), function (err, res, data) {
               if (err) throw err
               var val = parseFloat(data.toString());
+              //something went wrong
+              if(isNaN(val))
+              {
+                  functionCallback(ctx,name,amount,-1);
+                  return;
+              }
               assetPriceMap[name] = new asset.Asset(asset.AssetType.STOCK, name ,val, val);
-              console.log("BUY PRICE FOR "+ name + ": " + val);
+              console.log("PRICE FOR "+ name + ": " + val);
               functionCallback(ctx,name,amount,assetPriceMap[name].amount);
           });
     }
