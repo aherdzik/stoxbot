@@ -92,20 +92,22 @@ function showPortfolio(ctx, params)
     var totalAssetValue = getPortfolioValueByUsername(username);
     
     var output = "PORTFOLIO FOR " + username + ": \n";
+    output+= "TOTAL PORTFOLIO VALUE: $" + totalAssetValue.toFixed(2) + "\n"
     
     stockMap[username].forEach(function(currentAsset) 
     {
         if(currentAsset.assetType == assetDef.AssetType.CASH)
         {
-            output += "CASH:\nMoney: $" + currentAsset.amount + "\nCash Portfolio Percentage: " + (currentAsset.amount/ totalAssetValue) * 100 + "%\n";
+            output += "Uninvested Money: $" + (currentAsset.amount).toFixed(2) + "\nUninvested Money Portfolio Percentage: " + ((currentAsset.amount/ totalAssetValue) * 100).toFixed(2) + "%\n";
         }
         else if(currentAsset.assetType == assetDef.AssetType.STOCK)
         {
-            var currentPrice = prices.getStockPrice(currentAsset.name);
-            var assetValue = currentAsset.amount * currentPrice;
-            output += currentAsset.name + ":\nShares: " + currentAsset.amount + "\nPrice: " + currentPrice + "\nTotal Asset Value: " + assetValue + "\n";
-            output += "Percentage Of Portfolio: " + (assetValue/ totalAssetValue) * 100 + "%\n";
-            output += "Average percentage change since purchase: " + ((currentPrice/ currentAsset.originalPrice)-1) * 100 + "%\n";
+            var currentPrice = prices.getStockPrice(currentAsset.name).toFixed(2);
+            var assetValue = (currentAsset.amount * currentPrice).toFixed(2);
+            output += "~~~~" + currentAsset.name + ":~~~~\nShares: " + currentAsset.amount + "\nPrice: $" + currentPrice + "\nAverage Purchase Price: $" + currentAsset.originalPrice.toFixed(2) +"\n";
+            output += "Average percentage change since purchase: " + (((currentPrice/ currentAsset.originalPrice)-1) * 100).toFixed(2) + "%\n";
+            output += "Total Asset Value: $" + assetValue + "\n";
+            output += "Percentage Of Portfolio: " + ((assetValue/ totalAssetValue) * 100).toFixed(2) + "%\n";
         }
     });
     
@@ -146,6 +148,12 @@ function printHelp(ctx){
 
 function buyStock(ctx, params)
 {
+    if(!isStockMarketOpen())
+    {
+        ctx.reply("Stock market is currently not open.");
+        return;
+    }
+    
     if(params.length ==2)
     {
         if(isNaN(parseFloat(params[0]))) //user put amount first maybe?
@@ -168,6 +176,28 @@ function buyStock(ctx, params)
     {
         ctx.reply("Invalid parameters. Proper buy syntax: "+ activationString + " buy [stock ticker name] [amount]");
     }
+}
+
+function isStockMarketOpen()
+{
+    var date = new Date();
+    var day = date.getDay();
+    if(day == 0 && day == 6){
+        return false;
+    }
+    var hour = date.getHours();
+    if(hour<6 || hour > 13){
+        return false;
+    }
+    
+    if(hour ==6)
+    {
+        if(date.getMinutes() <30){
+            return false;
+        }
+    }
+    
+    return true;
 }
 
 function buyStockCallBack(ctx, name, amount, price)
@@ -229,6 +259,12 @@ function buyStockCallBack(ctx, name, amount, price)
 }
 
 function sellStock(ctx, params){
+    if(!isStockMarketOpen())
+    {
+        ctx.reply("Stock market is currently not open.");
+        return;
+    }
+    
     if(params.length == 2)
     {
         if(isNaN(parseFloat(params[0]))) //user put amount first maybe?
@@ -326,7 +362,7 @@ function showScores(ctx){
     
     usernameToScoreArray.forEach(function(newObj)
     {
-        toReturn+= newObj.username + ": " + newObj.score + "\n";    
+        toReturn+= newObj.username + ": $" + newObj.score.toFixed(2) + "\n";    
     });
     
     ctx.reply(toReturn);

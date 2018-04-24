@@ -17,7 +17,6 @@ PriceCache.prototype.updateCache = function()
           if (err) throw err
           var val = parseFloat(data.toString());
           assetPriceMap[k] = new asset.Asset(asset.AssetType.STOCK, k ,val, val);
-          console.log("NEW PRICE FOR "+ k + ": " + val);
         });
     });
 };
@@ -71,7 +70,6 @@ PriceCache.prototype.getStockWithCallback = function(functionCallback,ctx,name,a
                   return;
               }
               assetPriceMap[name] = new asset.Asset(asset.AssetType.STOCK, name ,val, val);
-              console.log("PRICE FOR "+ name + ": " + val);
               functionCallback(ctx,name,amount,assetPriceMap[name].amount);
           });
     }
