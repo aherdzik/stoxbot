@@ -49,12 +49,15 @@ bot.on('text', (ctx) => {
             case "help":
                 printHelp(ctx);
             break;
+            case "b":
             case "buy":
                 buyStock(ctx, restOfStuff);
             break;
+            case "s":
             case "sell":
                 sellStock(ctx, restOfStuff);
             break;
+            case "p":
             case "portfolio":
                 showPortfolio(ctx, restOfStuff);
             break;
@@ -62,6 +65,7 @@ bot.on('text', (ctx) => {
             case "scores":
                 showScores(ctx);
             case "price":
+            case "q":
             case "quote":
                 showQuote(ctx, restOfStuff);
             break;
