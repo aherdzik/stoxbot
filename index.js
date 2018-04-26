@@ -35,10 +35,11 @@ bot.on('text', (ctx) => {
     var username = msg.from.username;
     var id = msg.from.id;
     var msgText = msg.text;
-    console.log(username + "(" + id + "): " + msgText);
-    
     joinAutomatically(username);
     var splitStr= msgText.split(" ");
+    if(splitStr[0] == activationString){
+        console.log(username + "(" + id + "): " + msgText);
+    }
     if(splitStr[0] == activationString)
     {
         if(splitStr.length == 1)
@@ -190,7 +191,7 @@ function isStockMarketOpen()
         return false;
     }
     var hour = date.getHours();
-    if(hour<6 || hour > 13){
+    if(hour<6 || hour > 12){
         return false;
     }
     
@@ -359,7 +360,10 @@ function showScores(ctx){
     Object.keys(stockMap).forEach(function(k)
     {
         var obj = {username:k, score:parseFloat(getPortfolioValueByUsername(k))};
-        usernameToScoreArray.push(obj);
+        if((obj.score != 100000))
+        {
+            usernameToScoreArray.push(obj);
+        }
     });
     
     usernameToScoreArray.sort(function(a, b){return parseFloat(b.score) - parseFloat(a.score)});
