@@ -7,8 +7,10 @@ var prices = {};
 const fs = require('fs');
 var telegramAuth = "";
 var dbLocation = "";
+var FRlocation = "featurerequests.json"
 var bot = "";
 var baseMoney = 100000.0;
+var featureRequests = [];
 
 function readInArgs()
 {
@@ -47,6 +49,12 @@ bot.on('text', (ctx) => {
         var restOfStuff = splitStr.slice(2);
         
         switch(splitStr[1].toLowerCase()){
+            case "addfeaturerequest":
+                addFeatureRequest(ctx,restOfStuff);
+            break;
+            case "featurerequests":
+                showFeatureRequests(ctx,restOfStuff);
+            break;
             case "help":
                 printHelp(ctx);
             break;
@@ -78,6 +86,28 @@ bot.on('text', (ctx) => {
         writeData();
     }
 });
+
+
+function addFeatureRequest(ctx, params)
+{
+    var toSave = "";
+    params.forEach(function(asset) 
+    {
+        toSave+= asset + " ";
+    }); 
+    featureRequests.push(toSave);
+    ctx.reply("Request saved.");
+}
+
+function showFeatureRequests(ctx, params)
+{
+    var toPrint = "Current Feature Requests:\n";
+    featureRequests.forEach(function(asset) 
+    {
+        toPrint+= asset + "\n";
+    }); 
+    ctx.reply(toPrint);
+}
 
 function showPortfolio(ctx, params)
 {
@@ -148,6 +178,8 @@ function printHelp(ctx){
     output+=activationString + " scores: See the global portfolio value leaderboards\n";
     output+=activationString + " quote [space-delimited list of stock names]: Get a fairly recent quote for a stock (or stocks)\n";
     output+=activationString + " help: See my commands (but you knew that already!)\n";
+    output+=activationString + " addfeaturerequest: Put in a feature request so that Alex will take a look at it eventually.\n";
+    output+=activationString + " featurerequests: See current feature requests, so there aren't any duplicates.\n";
     ctx.reply(output);
 }
 
@@ -405,6 +437,7 @@ function getPortfolioValueByUsername(username)
 function writeData()
 {
     fs.writeFileSync(dbLocation, JSON.stringify(stockMap));  
+    fs.writeFileSync(FRlocation, JSON.stringify(featureRequests));  
 }
 
 function readInAllStocks()
@@ -425,6 +458,8 @@ function readInAllStocks()
             }
         }); 
     });
+    
+    featureRequests = JSON.parse(fs.readFileSync("./" + FRlocation));
     
     prices = new PriceCache();
     prices.initialize(stocksToGrab, bot);
