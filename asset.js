@@ -15,5 +15,28 @@ class Asset
   }
 }
 
+isStockMarketOpen = function()
+{
+    var date = new Date();
+    var day = date.getDay();
+    if(day == 0 && day == 6){
+        return false;
+    }
+    var hour = date.getHours();
+    if(hour<6 || hour > 12){
+        return false;
+    }
+    
+    if(hour ==6)
+    {
+        if(date.getMinutes() <30){
+            return false;
+        }
+    }
+    
+    return true;
+};
+
 module.exports.Asset = Asset;
 module.exports.AssetType = AssetType;
+module.exports.StockMarketOpen = isStockMarketOpen;

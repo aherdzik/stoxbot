@@ -1,7 +1,7 @@
 const get = require('simple-get');
 const asset = require('./asset.js')
 var assetPriceMap = new Map();
-var updateTimeout = 300 * 1000; //update every 5 minutes
+var updateTimeout = 300* 1000 ; //update every 5 minutes
 class PriceCache{
     constructor() 
     {
@@ -11,14 +11,27 @@ class PriceCache{
 
 PriceCache.prototype.updateCache = function()
 {
-    Object.keys(assetPriceMap).forEach(function(k)
+    if(asset.StockMarketOpen())
     {
-       get.concat(getStockRetrievalUrl(k), function (err, res, data) {
-          if (err) throw err
-          var val = parseFloat(data.toString());
-          assetPriceMap[k] = new asset.Asset(asset.AssetType.STOCK, k ,val, val);
+        Object.keys(assetPriceMap).forEach(function(k)
+        {
+           get.concat(getStockRetrievalUrl(k), function (err, res, data) {
+              if (err)
+              {
+                  console.log(err);
+              }
+              else
+              {
+                  var val = parseFloat(data.toString());
+                  assetPriceMap[k] = new asset.Asset(asset.AssetType.STOCK, k ,val, val);
+              }
+            });
         });
-    });
+    }
+    else
+    {
+        console.log("stock market not open")
+    }
 };
 
 PriceCache.prototype.initialize = function(stocksToGrab, bot) 
@@ -61,7 +74,11 @@ PriceCache.prototype.getStockWithCallback = function(functionCallback,ctx,name,a
     if(assetPriceMap[name] == null)
     {
           get.concat(getStockRetrievalUrl(name), function (err, res, data) {
-              if (err) throw err
+              if (err) 
+              {
+                  ctx.reply("ERROR OCCURRED:" + err) 
+                  return;
+              }
               var val = parseFloat(data.toString());
               //something went wrong
               if(isNaN(val))

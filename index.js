@@ -2,7 +2,6 @@ const Telegraf = require('telegraf')
 const PriceCache = require('./pricecache.js')
 const assetDef = require('./asset.js')
 var stockMap = new Map();
-var activationString = "/stox";
 var prices = {};
 const fs = require('fs');
 var telegramAuth = "";
@@ -34,57 +33,53 @@ readInArgs();
 
 bot.on('text', (ctx) => {
     var msg = ctx.message;
-    var username = msg.from.username;
+    var username = msg.from.username.toLowerCase();
     var id = msg.from.id;
     var msgText = msg.text;
     joinAutomatically(username);
     var splitStr= msgText.split(" ");
-    if(splitStr[0] == activationString){
-        console.log(username + "(" + id + "): " + msgText);
-    }
-    if(splitStr[0] == activationString)
-    {
-        if(splitStr.length == 1)
-            return;
-        var restOfStuff = splitStr.slice(2);
-        
-        switch(splitStr[1].toLowerCase()){
-            case "addfeaturerequest":
-                addFeatureRequest(ctx,restOfStuff);
-            break;
-            case "featurerequests":
-                showFeatureRequests(ctx,restOfStuff);
-            break;
-            case "help":
-                printHelp(ctx);
-            break;
-            case "b":
-            case "buy":
-                buyStock(ctx, restOfStuff);
-            break;
-            case "s":
-            case "sell":
-                sellStock(ctx, restOfStuff);
-            break;
-            case "p":
-            case "portfolio":
-                showPortfolio(ctx, restOfStuff);
-            break;
-            case "score":
-            case "scores":
-                showScores(ctx);
-            case "price":
-            case "q":
-            case "quote":
-                showQuote(ctx, restOfStuff);
-            break;
-            default:
+    var restOfStuff = splitStr.slice(1);
+    
+    switch(splitStr[0].toLowerCase()){
+        case "/addfeaturerequest":
+        case "/afr":
+            addFeatureRequest(ctx,restOfStuff);
+        break;
+        case "/featurerequests":
+            showFeatureRequests(ctx,restOfStuff);
+        break;
+        case "/help":
+            printHelp(ctx);
+        break;
+        case "/b":
+        case "/buy":
+            buyStock(ctx, restOfStuff);
+        break;
+        case "/s":
+        case "/sell":
+            sellStock(ctx, restOfStuff);
+        break;
+        case "/p":
+        case "/portfolio":
+            showPortfolio(ctx, restOfStuff);
+        break;
+        case "/score":
+        case "/scores":
+            showScores(ctx);
+        case "/price":
+        case "/q":
+        case "/quote":
+            showQuote(ctx, restOfStuff);
+        break;
+        default:
+            if(splitStr[0].startsWith("/"))
+            {
                 ctx.reply("Command not found.");
-            break;
-            
-        }
-        writeData();
+            }
+        break;
+        
     }
+    writeData();
 });
 
 
@@ -111,7 +106,7 @@ function showFeatureRequests(ctx, params)
 
 function showPortfolio(ctx, params)
 {
-    var username = ctx.message.from.username;
+    var username = ctx.message.from.username.toLowerCase();
     if(params.length > 0)
     {
         if(stockMap[params[0]] == null)
@@ -124,7 +119,7 @@ function showPortfolio(ctx, params)
         }
     }
     
-    var totalAssetValue = getPortfolioValueByUsername(username);
+    var totalAssetValue = getPortfolioValueByUsername(username.toLowerCase());
     
     var output = "PORTFOLIO FOR " + username + ": \n";
     output+= "TOTAL PORTFOLIO VALUE: $" + totalAssetValue.toFixed(2) + "\n"
@@ -172,20 +167,20 @@ function showQuoteCallBack(ctx, name, amount, price)
 function printHelp(ctx){
     var output= "Hi, I'm Stoxbot! I'm a simple stock tracker bot that people can use to buy and sell stocks with play money with their friends on Telegram!\n";
     output+="Here are my commands:\n";
-    output+=activationString + " buy [stock name][amount] : Buy a stock\n";
-    output+=activationString + " sell [stock name][amount]: Sell a stock\n";
-    output+=activationString + " portfolio [username(optional, default is message sender)]: See portfolio stats for a given user\n";
-    output+=activationString + " scores: See the global portfolio value leaderboards\n";
-    output+=activationString + " quote [space-delimited list of stock names]: Get a fairly recent quote for a stock (or stocks)\n";
-    output+=activationString + " help: See my commands (but you knew that already!)\n";
-    output+=activationString + " addfeaturerequest: Put in a feature request so that Alex will take a look at it eventually.\n";
-    output+=activationString + " featurerequests: See current feature requests, so there aren't any duplicates.\n";
+    output+="/buy [stock name][amount] : Buy a stock\n";
+    output+="/sell [stock name][amount]: Sell a stock\n";
+    output+="/portfolio [username(optional, default is message sender)]: See portfolio stats for a given user\n";
+    output+="/scores: See the global portfolio value leaderboards\n";
+    output+="/quote [space-delimited list of stock names]: Get a fairly recent quote for a stock (or stocks)\n";
+    output+="/help: See my commands (but you knew that already!)\n";
+    output+="/addfeaturerequest (or /afr): Put in a feature request so that Alex will take a look at it eventually.\n";
+    output+="/featurerequests: See current feature requests, so there aren't any duplicates.\n";
     ctx.reply(output);
 }
 
 function buyStock(ctx, params)
 {
-    if(!isStockMarketOpen())
+    if(!assetDef.StockMarketOpen())
     {
         ctx.reply("Stock market is currently not open.");
         return;
@@ -211,30 +206,8 @@ function buyStock(ctx, params)
     }
     else
     {
-        ctx.reply("Invalid parameters. Proper buy syntax: "+ activationString + " buy [stock ticker name] [amount]");
+        ctx.reply("Invalid parameters. Proper buy syntax: /buy [stock ticker name] [amount]");
     }
-}
-
-function isStockMarketOpen()
-{
-    var date = new Date();
-    var day = date.getDay();
-    if(day == 0 && day == 6){
-        return false;
-    }
-    var hour = date.getHours();
-    if(hour<6 || hour > 12){
-        return false;
-    }
-    
-    if(hour ==6)
-    {
-        if(date.getMinutes() <30){
-            return false;
-        }
-    }
-    
-    return true;
 }
 
 function buyStockCallBack(ctx, name, amount, price)
@@ -245,7 +218,7 @@ function buyStockCallBack(ctx, name, amount, price)
         return;
     }
     
-    var username = ctx.message.from.username;
+    var username = ctx.message.from.username.toLowerCase();
     
     var cashIndex = -1;
     for(var i = 0; i < stockMap[username].length; i++)
@@ -296,7 +269,7 @@ function buyStockCallBack(ctx, name, amount, price)
 }
 
 function sellStock(ctx, params){
-    if(!isStockMarketOpen())
+    if(!assetDef.StockMarketOpen())
     {
         ctx.reply("Stock market is currently not open.");
         return;
@@ -322,7 +295,7 @@ function sellStock(ctx, params){
     }
     else
     {
-        ctx.reply("Invalid parameters. Proper sell syntax: "+ activationString + " sell [stock ticker name] [amount]");
+        ctx.reply("Invalid parameters. Proper sell syntax: /sell [stock ticker name] [amount]");
     }
 }
 
@@ -334,7 +307,7 @@ function sellStockCallBack(ctx, name, amount, price)
         return;
     }
     
-    var username = ctx.message.from.username;
+    var username = ctx.message.from.username.toLowerCase();
     
     var cashIndex = -1;
     for(var i = 0; i < stockMap[username].length; i++)
@@ -391,7 +364,7 @@ function showScores(ctx){
     
     Object.keys(stockMap).forEach(function(k)
     {
-        var obj = {username:k, score:parseFloat(getPortfolioValueByUsername(k))};
+        var obj = {username:k, score:parseFloat(getPortfolioValueByUsername(k.toLowerCase()))};
         if((obj.score != 100000))
         {
             usernameToScoreArray.push(obj);
@@ -410,9 +383,9 @@ function showScores(ctx){
 
 function joinAutomatically(username)
 {
-    if(stockMap[username] == null)
+    if(stockMap[username.toLowerCase()] == null)
     {
-        stockMap[username] = [new assetDef.Asset(assetDef.AssetType.CASH,"CASH",baseMoney, 0)];
+        stockMap[username.toLowerCase()] = [new assetDef.Asset(assetDef.AssetType.CASH,"CASH",baseMoney, 0)];
         writeData();
     }
 }
@@ -420,7 +393,7 @@ function joinAutomatically(username)
 function getPortfolioValueByUsername(username)
 {
     var currentVal= 0.0;
-    stockMap[username].forEach(function(asset) 
+    stockMap[username.toLowerCase()].forEach(function(asset) 
     {
         if(asset.assetType == assetDef.AssetType.CASH)
         {
