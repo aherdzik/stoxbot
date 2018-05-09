@@ -4,29 +4,21 @@ const assetDef = require('./asset.js')
 var stockMap = new Map();
 var prices = {};
 const fs = require('fs');
-var telegramAuth = "";
 var dbLocation = "";
-var FRlocation = "featurerequests.json"
+var FRlocation = "";
+var configLoc = "config.json";
 var bot = "";
 var baseMoney = 100000.0;
 var featureRequests = [];
+var homeChatID = "";
 
 function readInArgs()
 {
-    for (let j= 2; j< process.argv.length; j+=2)
-    {
-        switch(process.argv[j])
-        {
-            case "-db":
-            dbLocation = process.argv[j+1];
-            break;
-            case "-at":
-            bot = new Telegraf(process.argv[j+1]);
-            break;
-            default:
-            break;
-        }
-    }
+    var configObj = JSON.parse(fs.readFileSync("./" + configLoc));
+    bot = new Telegraf(configObj.authToken)
+    dbLocation = configObj.dbLocation;
+    FRlocation = configObj.frLocation;
+    homeChatID = configObj.homeChatId;
 }
 
 readInArgs();
@@ -66,10 +58,14 @@ bot.on('text', (ctx) => {
         case "/score":
         case "/scores":
             showScores(ctx);
+        break;
         case "/price":
         case "/q":
         case "/quote":
             showQuote(ctx, restOfStuff);
+        break;
+        case "/sayspec":
+            sayToChat(ctx, restOfStuff);
         break;
         default:
             if(splitStr[0].startsWith("/"))
@@ -82,6 +78,15 @@ bot.on('text', (ctx) => {
     writeData();
 });
 
+function sayToChat(ctx, params)
+{
+    var currentMsg = "";
+    params.forEach(function(word) 
+    {
+      currentMsg += word + " ";
+    });
+    ctx.telegram.sendMessage(homeChatID, currentMsg);
+}
 
 function addFeatureRequest(ctx, params)
 {
@@ -109,17 +114,17 @@ function showPortfolio(ctx, params)
     var username = ctx.message.from.username.toLowerCase();
     if(params.length > 0)
     {
-        if(stockMap[params[0]] == null)
+        if(stockMap[params[0].toLowerCase()] == null)
         {
             ctx.reply(params[0] + " is not a valid username, defaulting to sender.");
         }
         else
         {
-            username = params[0];
+            username = params[0].toLowerCase();
         }
     }
     
-    var totalAssetValue = getPortfolioValueByUsername(username.toLowerCase());
+    var totalAssetValue = getPortfolioValueByUsername(username);
     
     var output = "PORTFOLIO FOR " + username + ": \n";
     output+= "TOTAL PORTFOLIO VALUE: $" + totalAssetValue.toFixed(2) + "\n"
