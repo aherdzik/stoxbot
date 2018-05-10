@@ -30,28 +30,42 @@ PriceCache.prototype.updateCache = function()
     }
 };
 
-PriceCache.prototype.initialize = function(stocksToGrab, bot) 
+PriceCache.prototype.refreshAllWithCallback = function(functionCallback, stocksToGrab)
 {
     var stocksLeft = stocksToGrab.length;
     if(stocksLeft == 0)
     {
-        bot.startPolling();
+        functionCallback();
         return;
     }
+    
     stocksToGrab.forEach(function(k)
     {
         get.concat(getStockRetrievalUrl(k), function (err, res, data) {
-          if (err) throw err
-          var val = parseFloat(data.toString());
-          assetPriceMap[k.toUpperCase()] = new asset.Asset(asset.AssetType.STOCK, k.toUpperCase() ,val, val);
+          if (err)
+          {
+              console.log("ERROR ON REFRESHALL FOR STOCK: " + k.toUpperCase());
+              if(assetPriceMap[k.toUpperCase()] == null || parseFloat(assetPriceMap[k.toUpperCase()].originalPrice) == parseFloat(0))
+              {
+                console.log("NULL FOUND FOR STOCK " + k)
+                assetPriceMap[k.toUpperCase()] = new asset.Asset(asset.AssetType.STOCK, k.toUpperCase() ,parseFloat(0), parseFloat(0));
+              }
+          }
+          else
+          {
+                var val = parseFloat(data.toString());
+                assetPriceMap[k.toUpperCase()] = new asset.Asset(asset.AssetType.STOCK, k.toUpperCase() ,val, val);
+          }
+          
           stocksLeft--;
+          
           if(stocksLeft == 0)
           {
-             bot.startPolling();
+             functionCallback();
           }
         });
     });
-};
+}
 
 PriceCache.prototype.getStockPrice = function(stockName) 
 {

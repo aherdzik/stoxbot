@@ -12,7 +12,11 @@ var bot = "";
 var baseMoney = 100000.0;
 var featureRequests = [];
 var homeChatID = "";
-var maxStockAmount = 99999
+var maxStockAmount = 99999;
+var dayCheckTimer = 30 * 1000 ; //update every 30 seconds
+var currentlyAfterHours = false;
+var previousPortfolioLevels = {};
+var spareCtx;
 
 function readInArgs()
 {
@@ -27,6 +31,7 @@ function readInArgs()
 readInArgs();
 
 bot.on('text', (ctx) => {
+    spareCtx = ctx;
     var msg = ctx.message;
     var username = msg.from.username.toLowerCase();
     var msgText = msg.text;
@@ -43,6 +48,9 @@ bot.on('text', (ctx) => {
         break;
         case "/help":
             printHelp(ctx);
+        break;
+        case "/killswitch":
+            killBot();
         break;
         case "/b":
         case "/buy":
@@ -81,6 +89,14 @@ bot.on('text', (ctx) => {
     }
     writeData();
 });
+
+function killBot()
+{
+    if(sentFromAdmin)
+    {
+        bot.stop();
+    }
+}
 
 function sentFromAdmin(ctx){
     return ctx.from.id == adminID;
@@ -477,10 +493,75 @@ function writeData()
     fs.writeFileSync(FRlocation, JSON.stringify(featureRequests));  
 }
 
-function readInAllStocks()
+function checkForDayEndOrStart()
 {
-    stockMap = JSON.parse(fs.readFileSync("./" + dbLocation));
+    if(currentlyAfterHours == assetDef.StockMarketOpen())
+    {
+        var stocksToGrab = getListOfAllStocks();
+        prices.refreshAllWithCallback(dayToggleCallback,stocksToGrab);
+    }
+}
+
+function dayToggleCallback()
+{
+    currentlyAfterHours = !assetDef.StockMarketOpen();
+    var toReturn = "";
+    if(currentlyAfterHours)
+    {
+        toReturn += "END OF DAY REPORT: \n"
+    }
+    else
+    {
+        toReturn += "START OF DAY REPORT: \n"
+    }
     
+    toReturn += "PERCENT CHANGES SINCE LAST REPORT: \n"
+    
+    
+    var usernameToPercentChangeArray = new Array();
+    var newPreviousScores = {};
+    
+    Object.keys(stockMap).forEach(function(k)
+    {
+        var currentScore = parseFloat(getPortfolioValueByUsername(k.toLowerCase()));
+        newPreviousScores[k] = currentScore;
+        var obj = {username:k, score:parseFloat((((currentScore/ previousPortfolioLevels[k])-1) * 100).toFixed(2))};
+        if((parseFloat(obj.score) != parseFloat(100000)))
+        {
+            usernameToPercentChangeArray.push(obj);
+        }
+    });
+    
+    usernameToPercentChangeArray.sort(function(a, b){return parseFloat(b.score) - parseFloat(a.score)});
+    
+    usernameToPercentChangeArray.forEach(function(newObj)
+    {
+        toReturn+= newObj.username + ": " + newObj.score.toFixed(2) + "%\n";    
+    });
+    
+    previousPortfolioLevels = newPreviousScores;
+    spareCtx.telegram.sendMessage(homeChatID, toReturn);
+}
+
+function loadBackupData()
+{
+    Object.keys(stockMap).forEach(function(k)
+    {
+        previousPortfolioLevels[k] = getPortfolioValueByUsername(k);
+    });
+}
+
+function startupBot()
+{
+    bot.startPolling();
+    loadBackupData();
+    currentlyAfterHours = !assetDef.StockMarketOpen();
+    setInterval(checkForDayEndOrStart, dayCheckTimer, "");
+    console.log("STARTUP SUCCESSFUL");
+}
+
+function getListOfAllStocks()
+{
     var stocksToGrab = [];
     Object.keys(stockMap).forEach(function(k)
     {
@@ -496,10 +577,19 @@ function readInAllStocks()
         }); 
     });
     
+    return stocksToGrab;
+}
+
+function readInAllStocks()
+{
+    stockMap = JSON.parse(fs.readFileSync("./" + dbLocation));
+    
+    var stocksToGrab = getListOfAllStocks();
+    
     featureRequests = JSON.parse(fs.readFileSync("./" + FRlocation));
     
     prices = new PriceCache();
-    prices.initialize(stocksToGrab, bot);
+    prices.refreshAllWithCallback(startupBot,stocksToGrab);
 }
 
 readInAllStocks();
