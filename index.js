@@ -7,10 +7,12 @@ const fs = require('fs');
 var dbLocation = "";
 var FRlocation = "";
 var configLoc = "config.json";
+var adminID = ""
 var bot = "";
 var baseMoney = 100000.0;
 var featureRequests = [];
 var homeChatID = "";
+var maxStockAmount = 99999
 
 function readInArgs()
 {
@@ -18,7 +20,8 @@ function readInArgs()
     bot = new Telegraf(configObj.authToken)
     dbLocation = configObj.dbLocation;
     FRlocation = configObj.frLocation;
-    homeChatID = configObj.homeChatId;
+    homeChatID = configObj.homeChatID;
+    adminID = configObj.adminID;
 }
 
 readInArgs();
@@ -26,12 +29,10 @@ readInArgs();
 bot.on('text', (ctx) => {
     var msg = ctx.message;
     var username = msg.from.username.toLowerCase();
-    var id = msg.from.id;
     var msgText = msg.text;
     joinAutomatically(username);
     var splitStr= msgText.split(" ");
     var restOfStuff = splitStr.slice(1);
-    
     switch(splitStr[0].toLowerCase()){
         case "/addfeaturerequest":
         case "/afr":
@@ -59,6 +60,9 @@ bot.on('text', (ctx) => {
         case "/scores":
             showScores(ctx);
         break;
+        case "/givecash":
+            giveCash(ctx, restOfStuff);
+        break;
         case "/price":
         case "/q":
         case "/quote":
@@ -78,8 +82,42 @@ bot.on('text', (ctx) => {
     writeData();
 });
 
+function sentFromAdmin(ctx){
+    return ctx.from.id == adminID;
+}
+
+function giveCash(ctx, params)
+{
+    if(!sentFromAdmin(ctx)){
+        console.log("NOT ADMIN");
+        return;
+    }
+    
+    var username = params[0];
+    var cashAmount = parseFloat(params[1]);
+    
+    var cashIndex = -1;
+    for(var i = 0; i < stockMap[username].length; i++)
+    {
+        if(stockMap[username][i].assetType == assetDef.AssetType.CASH)
+        {
+            cashIndex = i;
+            break;
+        }
+    }
+    
+    stockMap[username][cashIndex].amount = +parseFloat(stockMap[username][cashIndex].amount.toFixed(2)) + +parseFloat(cashAmount);
+    console.log(cashAmount + " given to " + username + " successfully.")
+}
+
 function sayToChat(ctx, params)
 {
+    if(!sentFromAdmin(ctx))
+    {
+        console.log("NOT ADMIN");
+        return;
+    }
+    
     var currentMsg = "";
     params.forEach(function(word) 
     {
@@ -129,22 +167,30 @@ function showPortfolio(ctx, params)
     var output = "PORTFOLIO FOR " + username + ": \n";
     output+= "TOTAL PORTFOLIO VALUE: $" + totalAssetValue.toFixed(2) + "\n"
     
-    stockMap[username].forEach(function(currentAsset) 
+    for(var i = 0; i < stockMap[username].length; i++)
     {
+        var currentAsset = stockMap[username][i];
         if(currentAsset.assetType == assetDef.AssetType.CASH)
         {
             output += "Uninvested Money: $" + (currentAsset.amount).toFixed(2) + "\nUninvested Money Portfolio Percentage: " + ((currentAsset.amount/ totalAssetValue) * 100).toFixed(2) + "%\n";
         }
         else if(currentAsset.assetType == assetDef.AssetType.STOCK)
         {
-            var currentPrice = prices.getStockPrice(currentAsset.name).toFixed(2);
-            var assetValue = (currentAsset.amount * currentPrice).toFixed(2);
-            output += "~~~~" + currentAsset.name + ":~~~~\nShares: " + currentAsset.amount + "\nPrice: $" + currentPrice + "\nAverage Purchase Price: $" + currentAsset.originalPrice.toFixed(2) +"\n";
-            output += "Average percentage change since purchase: " + (((currentPrice/ currentAsset.originalPrice)-1) * 100).toFixed(2) + "%\n";
-            output += "Total Asset Value: $" + assetValue + "\n";
-            output += "Percentage Of Portfolio: " + ((assetValue/ totalAssetValue) * 100).toFixed(2) + "%\n";
+            if(parseInt(currentAsset.amount) == 0)
+            {
+                stockMap[username].splice(i--,1);
+            }
+            else
+            {
+                var currentPrice = prices.getStockPrice(currentAsset.name).toFixed(2);
+                var assetValue = (currentAsset.amount * currentPrice).toFixed(2);
+                output += "~~~~" + currentAsset.name + ":~~~~\nShares: " + currentAsset.amount + "\nPrice: $" + currentPrice + "\nAverage Purchase Price: $" + currentAsset.originalPrice.toFixed(2) +"\n";
+                output += "Average percentage change since purchase: " + (((currentPrice/ currentAsset.originalPrice)-1) * 100).toFixed(2) + "%\n";
+                output += "Total Asset Value: $" + assetValue + "\n";
+                output += "Percentage Of Portfolio: " + ((assetValue/ totalAssetValue) * 100).toFixed(2) + "%\n";
+            }
         }
-    });
+    }
     
     ctx.reply(output);
 }
@@ -185,7 +231,7 @@ function printHelp(ctx){
 
 function buyStock(ctx, params)
 {
-    if(!assetDef.StockMarketOpen())
+    if(!assetDef.StockMarketOpen() && !sentFromAdmin(ctx))
     {
         ctx.reply("Stock market is currently not open.");
         return;
@@ -223,6 +269,12 @@ function buyStockCallBack(ctx, name, amount, price)
         return;
     }
     
+    if(parseInt(amount) > parseInt(maxStockAmount))
+    {
+        ctx.reply("stock amount must be between 1 and " + maxStockAmount)
+        return;
+    }
+    
     var username = ctx.message.from.username.toLowerCase();
     
     var cashIndex = -1;
@@ -235,7 +287,7 @@ function buyStockCallBack(ctx, name, amount, price)
         }
     }
     
-    if(price * amount > stockMap[username][cashIndex].amount)
+    if(parseFloat(price * amount) > parseFloat(stockMap[username][cashIndex].amount))
     {
         ctx.reply(username + " doesn't have enough money to buy " + amount + " shares of " + name + ". Required money: " + price * amount + ". Available money: " + stockMap[username][cashIndex].amount + ".");
         return;
@@ -261,11 +313,11 @@ function buyStockCallBack(ctx, name, amount, price)
     }
     else
     {
-        var totalAssetVal = (stockMap[username][assetIndex].amount * stockMap[username][assetIndex].originalPrice) + (amount * price);
+        var totalAssetVal = +(stockMap[username][assetIndex].amount * stockMap[username][assetIndex].originalPrice) + +(amount * price);
         var totalStockAmount = +stockMap[username][assetIndex].amount + +amount;
         
         stockMap[username][assetIndex].amount = totalStockAmount;
-        stockMap[username][assetIndex].originalPrice = totalAssetVal/totalStockAmount;
+        stockMap[username][assetIndex].originalPrice = parseFloat(totalAssetVal/totalStockAmount);
     }
     
     ctx.reply(username + " has successfully purchased " + amount + " shares of " + name + " for " + price + " per share.");
@@ -273,8 +325,9 @@ function buyStockCallBack(ctx, name, amount, price)
     writeData();
 }
 
-function sellStock(ctx, params){
-    if(!assetDef.StockMarketOpen())
+function sellStock(ctx, params)
+{
+    if(!assetDef.StockMarketOpen() && !sentFromAdmin(ctx))
     {
         ctx.reply("Stock market is currently not open.");
         return;
@@ -312,6 +365,12 @@ function sellStockCallBack(ctx, name, amount, price)
         return;
     }
     
+    if(parseInt(amount) > parseInt(maxStockAmount))
+    {
+        ctx.reply("stock amount must be between 1 and " + maxStockAmount)
+        return;
+    }
+    
     var username = ctx.message.from.username.toLowerCase();
     
     var cashIndex = -1;
@@ -343,7 +402,7 @@ function sellStockCallBack(ctx, name, amount, price)
         return;
     }
     
-    if(stockMap[username][assetIndex].amount < amount)
+    if(parseInt(stockMap[username][assetIndex].amount) < parseInt(amount))
     {
         ctx.reply(username + " doesn't have enough " + name + " shares to sell. Shares in sell command: "+ amount + ". Shares in portfolio: " + stockMap[username][assetIndex].amount + ".");
         return;
@@ -352,7 +411,7 @@ function sellStockCallBack(ctx, name, amount, price)
     // at this point, we know it's a valid command
     stockMap[username][cashIndex].amount += price * amount;
     stockMap[username][assetIndex].amount -= amount;
-    if(stockMap[username][assetIndex].amount == 0)
+    if(parseInt(stockMap[username][assetIndex].amount) == parseInt(0))
     {
         stockMap[username].splice(assetIndex, 1);
     }
@@ -370,7 +429,7 @@ function showScores(ctx){
     Object.keys(stockMap).forEach(function(k)
     {
         var obj = {username:k, score:parseFloat(getPortfolioValueByUsername(k.toLowerCase()))};
-        if((obj.score != 100000))
+        if((parseFloat(obj.score) != parseFloat(100000)))
         {
             usernameToScoreArray.push(obj);
         }

@@ -28,10 +28,6 @@ PriceCache.prototype.updateCache = function()
             });
         });
     }
-    else
-    {
-        console.log("stock market not open")
-    }
 };
 
 PriceCache.prototype.initialize = function(stocksToGrab, bot) 
