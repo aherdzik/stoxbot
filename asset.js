@@ -19,7 +19,7 @@ isStockMarketOpen = function()
 {
     var date = new Date();
     var day = date.getDay();
-    if(day == 0 && day == 6){
+    if(day == 0 || day == 6){
         return false;
     }
     var hour = date.getHours();

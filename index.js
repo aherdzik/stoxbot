@@ -33,6 +33,11 @@ readInArgs();
 bot.on('text', (ctx) => {
     spareCtx = ctx;
     var msg = ctx.message;
+    if(!msg.from.username)
+    {
+        console.log("NO USERNAME");
+        return;
+    }
     var username = msg.from.username.toLowerCase();
     var msgText = msg.text;
     joinAutomatically(username);
@@ -48,9 +53,6 @@ bot.on('text', (ctx) => {
         break;
         case "/help":
             printHelp(ctx);
-        break;
-        case "/killswitch":
-            killBot();
         break;
         case "/b":
         case "/buy":
@@ -89,14 +91,6 @@ bot.on('text', (ctx) => {
     }
     writeData();
 });
-
-function killBot()
-{
-    if(sentFromAdmin)
-    {
-        bot.stop();
-    }
-}
 
 function sentFromAdmin(ctx){
     return ctx.from.id == adminID;
@@ -285,7 +279,7 @@ function buyStockCallBack(ctx, name, amount, price)
         return;
     }
     
-    if(parseInt(amount) > parseInt(maxStockAmount))
+    if(parseInt(amount) > parseInt(maxStockAmount) || parseInt(amount) < 1 )
     {
         ctx.reply("stock amount must be between 1 and " + maxStockAmount)
         return;
@@ -336,8 +330,7 @@ function buyStockCallBack(ctx, name, amount, price)
         stockMap[username][assetIndex].originalPrice = parseFloat(totalAssetVal/totalStockAmount);
     }
     
-    ctx.reply(username + " has successfully purchased " + amount + " shares of " + name + " for " + price + " per share.");
-    
+    ctx.reply(username + " has successfully purchased " + amount + " shares of " + name + " for " + price + " per share." + remainingCashString(username));
     writeData();
 }
 
@@ -381,7 +374,7 @@ function sellStockCallBack(ctx, name, amount, price)
         return;
     }
     
-    if(parseInt(amount) > parseInt(maxStockAmount))
+    if(parseInt(amount) > parseInt(maxStockAmount) || parseInt(amount) < 1)
     {
         ctx.reply("stock amount must be between 1 and " + maxStockAmount)
         return;
@@ -432,7 +425,7 @@ function sellStockCallBack(ctx, name, amount, price)
         stockMap[username].splice(assetIndex, 1);
     }
     
-    ctx.reply(username + " has successfully sold " + amount + " shares of " + name + " for " + price + " per share.");
+    ctx.reply(username + " has successfully sold " + amount + " shares of " + name + " for " + price + " per share." + remainingCashString(username));
     
     writeData();
 }
@@ -468,6 +461,24 @@ function joinAutomatically(username)
         stockMap[username.toLowerCase()] = [new assetDef.Asset(assetDef.AssetType.CASH,"CASH",baseMoney, 0)];
         writeData();
     }
+}
+
+function remainingCashString(username)
+{
+    return " " + username + " has $" + getUserCashAmount(username) + " of fungible cash remaining.";
+}
+
+function getUserCashAmount(username)
+{
+    var valToSend = 0;
+    stockMap[username.toLowerCase()].forEach(function(asset) 
+    {
+        if(asset.assetType == assetDef.AssetType.CASH)
+        {
+            valToSend = asset.amount;
+        }
+    });
+    return valToSend.toFixed(2);
 }
 
 function getPortfolioValueByUsername(username)
@@ -526,7 +537,7 @@ function dayToggleCallback()
         var currentScore = parseFloat(getPortfolioValueByUsername(k.toLowerCase()));
         newPreviousScores[k] = currentScore;
         var obj = {username:k, score:parseFloat((((currentScore/ previousPortfolioLevels[k])-1) * 100).toFixed(2))};
-        if((parseFloat(obj.score) != parseFloat(100000)))
+        if((parseFloat(currentScore) != parseFloat(100000)))
         {
             usernameToPercentChangeArray.push(obj);
         }
@@ -541,6 +552,11 @@ function dayToggleCallback()
     
     previousPortfolioLevels = newPreviousScores;
     spareCtx.telegram.sendMessage(homeChatID, toReturn);
+    
+    if(currentlyAfterHours)
+    {
+        showScores(spareCtx);
+    }
 }
 
 function loadBackupData()
