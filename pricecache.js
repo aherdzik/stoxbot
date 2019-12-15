@@ -2,113 +2,187 @@ const get = require('simple-get');
 const asset = require('./asset.js')
 var assetPriceMap = new Map();
 var updateTimeout = 300* 1000 ; //update every 5 minutes
+var assetAPIKey=  ""
+var stocksPerQuery = 15;
+var futures;
 class PriceCache{
-    constructor() 
+    constructor(apiKey) 
     {
+        assetAPIKey = apiKey;
         setInterval(this.updateCache, updateTimeout, "");
     }
+};
+
+function sleep(milliseconds) {
+  var start = new Date().getTime();
+  for (var i = 0; i < 1e7; i++) {
+    if ((new Date().getTime() - start) > milliseconds){
+      break;
+    }
+  }
+}
+
+PriceCache.prototype.refreshAllWithCallback = function(functionCallback, stocksToGrab)
+{
+    try
+    {
+        var stocksLeft = Math.ceil(stocksToGrab.length/stocksPerQuery);
+        if(stocksLeft == 0)
+        {
+            if(functionCallback)
+            {
+                functionCallback();
+            }
+            return;
+        }   
+        
+        futures = stocksLeft;
+        
+        for (var i = 1; i <= stocksLeft; i++)
+        {
+            var startNum = (i-1) * stocksPerQuery;
+            var endNum = (i == stocksLeft) ? stocksToGrab.length : (i) * stocksPerQuery;
+            var curQueryStr = "";
+            for (var j = startNum; j< endNum; j++)
+            {
+                var curStockStr = stocksToGrab[j];
+                curQueryStr+= curStockStr;
+                if(j != endNum-1 )
+                {
+                    curQueryStr += ",";
+                }
+            }
+            
+            get.concat(getStockRetrievalUrl(curQueryStr), function (err, res, data) {
+              if (err)
+              {
+                  console.log("err on getStockRetrievalUrl: " + err+ "res: " + res)
+              }
+              else
+              {
+                  var mainObj = JSON.parse(data.toString());
+                  var stockQuotes = mainObj['Stock Quotes'];
+                  if(stockQuotes == undefined)
+                  {
+                      console.log("probable overload")
+                      futures--;
+                      return;
+                  }
+                  
+                  for(var k = 0 ; k <stockQuotes.length; k++)
+                  {
+                      var stockName= stockQuotes[k]['1. symbol'];
+                      var stockPrice = parseFloat(stockQuotes[k]['2. price'])
+                      assetPriceMap.set(stockName.toUpperCase(), new asset.Asset(asset.AssetType.STOCK, stockName.toUpperCase() ,stockPrice, stockPrice));
+                  }
+              }
+              
+              futures--;
+            });
+        }
+        
+        var timeout = function(){
+            setTimeout(function () {
+                console.log("futures: " + futures);
+                if(futures == 0)
+                {
+                    if(functionCallback)
+                    {
+                        functionCallback();
+                    }
+                }
+                else
+                {
+                    timeout();
+                }
+            }, 100);
+        }
+        timeout();
+    }
+    catch(e)
+    {
+        console.log("ERROR IN refreshAllWithCallback catch: " + e.stack);
+        if(functionCallback)
+        {
+            functionCallback();
+        }
+    }
+    
 };
 
 PriceCache.prototype.updateCache = function()
 {
     if(asset.StockMarketOpen())
     {
-        Object.keys(assetPriceMap).forEach(function(k)
-        {
-           get.concat(getStockRetrievalUrl(k), function (err, res, data) {
-              if (err)
-              {
-                  console.log(err);
-              }
-              else
-              {
-                  var val = parseFloat(data.toString());
-                  assetPriceMap[k] = new asset.Asset(asset.AssetType.STOCK, k ,val, val);
-              }
-            });
-        });
+        PriceCache.prototype.refreshAllWithCallback(null,Array.from(assetPriceMap.keys()));
     }
 };
 
-PriceCache.prototype.refreshAllWithCallback = function(functionCallback, stocksToGrab)
-{
-    var stocksLeft = stocksToGrab.length;
-    if(stocksLeft == 0)
-    {
-        functionCallback();
-        return;
-    }
-    
-    stocksToGrab.forEach(function(k)
-    {
-        get.concat(getStockRetrievalUrl(k), function (err, res, data) {
-          if (err)
-          {
-              console.log("ERROR ON REFRESHALL FOR STOCK: " + k.toUpperCase());
-              if(assetPriceMap[k.toUpperCase()] == null || parseFloat(assetPriceMap[k.toUpperCase()].originalPrice) == parseFloat(0))
-              {
-                console.log("NULL FOUND FOR STOCK " + k)
-                assetPriceMap[k.toUpperCase()] = new asset.Asset(asset.AssetType.STOCK, k.toUpperCase() ,parseFloat(0), parseFloat(0));
-              }
-          }
-          else
-          {
-                var val = parseFloat(data.toString());
-                assetPriceMap[k.toUpperCase()] = new asset.Asset(asset.AssetType.STOCK, k.toUpperCase() ,val, val);
-          }
-          
-          stocksLeft--;
-          
-          if(stocksLeft == 0)
-          {
-             functionCallback();
-          }
-        });
-    });
-}
-
 PriceCache.prototype.getStockPrice = function(stockName) 
 {
-    return assetPriceMap[stockName].amount;
+    if(assetPriceMap.has(stockName))
+    {
+        return assetPriceMap.get(stockName).amount;
+    }
+    else
+    {
+        console.log("oops on getStockPrice: " + stockName)
+        return 0;
+    }
 };
 
 PriceCache.prototype.getStockWithCallback = function(functionCallback,ctx,name,amount)
 {
-    name = String(name).toUpperCase();
-    
-    while(name.charAt(0) === '$')
-    {
-        name = name.substr(1);
-    }
-    
-    if(assetPriceMap[name] == null)
-    {
-          get.concat(getStockRetrievalUrl(name), function (err, res, data) {
-              if (err) 
+    try{
+        name = String(name).toUpperCase();
+        
+        while(name.charAt(0) === '$')
+        {
+            name = name.substr(1);
+        }
+        
+        if(assetPriceMap.get(name) == null)
+        {
+            get.concat(getStockRetrievalUrl(name), function (err, res, data) {
+              if (err)
               {
                   ctx.reply("ERROR OCCURRED:" + err) 
                   return;
               }
-              var val = parseFloat(data.toString());
-              //something went wrong
-              if(isNaN(val))
+              else
               {
-                  functionCallback(ctx,name,amount,-1);
-                  return;
+                  var mainObj = JSON.parse(data.toString());
+                  var stockQuotes = mainObj['Stock Quotes'];
+                  for(var k = 0 ; k <stockQuotes.length; k++)
+                  {
+                      var stockName= stockQuotes[k]['1. symbol'];
+                      var stockPrice = parseFloat(stockQuotes[k]['2. price'])
+                      assetPriceMap.set(name,new asset.Asset(asset.AssetType.STOCK, name ,stockPrice, stockPrice));
+                      if(functionCallback)
+                      {
+                        functionCallback(ctx,name,amount,assetPriceMap.get(name).stockPrice);
+                      }
+                  }
               }
-              assetPriceMap[name] = new asset.Asset(asset.AssetType.STOCK, name ,val, val);
-              functionCallback(ctx,name,amount,assetPriceMap[name].amount);
-          });
+            });
+        }
+        else
+        {
+            if(functionCallback)
+            {
+                functionCallback(ctx,name,amount,assetPriceMap.get(name).amount);
+            }
+        }
     }
-    else
+    catch(e)
     {
-        functionCallback(ctx,name,amount,assetPriceMap[name].amount);
+        console.log("ERROR IN getStockWithCallback catch: " + e.stack);
+        ctx.reply("ERROR IN getStockWithCallback catch: " + e.stack) 
     }
 };
 
 function getStockRetrievalUrl(stockName)
 {
-    return ('https://api.iextrading.com/1.0/stock/' + stockName + '/price')
+    return ('https://www.alphavantage.co/query?function=BATCH_STOCK_QUOTES&symbols=' + stockName + '&apikey=' + assetAPIKey);
 }
-
 module.exports = PriceCache;

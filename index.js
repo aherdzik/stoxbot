@@ -6,6 +6,7 @@ var prices = {};
 const fs = require('fs');
 var dbLocation = "";
 var FRlocation = "";
+var apiKey= "";
 var configLoc = "config.json";
 var adminID = ""
 var bot = "";
@@ -13,8 +14,8 @@ var baseMoney = 100000.0;
 var featureRequests = [];
 var homeChatID = "";
 var maxStockAmount = 99999;
-var dayCheckTimer = 30 * 1000 ; //update every 30 seconds
-var currentlyAfterHours = false;
+var dayCheckTimer = 300 * 1000 ; //update every 30 seconds
+var marketCurrentlyOpen = true;
 var previousPortfolioLevels = {};
 var spareCtx;
 
@@ -25,6 +26,7 @@ function readInArgs()
     dbLocation = configObj.dbLocation;
     FRlocation = configObj.frLocation;
     homeChatID = configObj.homeChatID;
+    apiKey = configObj.apiKey;
     adminID = configObj.adminID;
 }
 
@@ -159,6 +161,8 @@ function showFeatureRequests(ctx, params)
 
 function showPortfolio(ctx, params)
 {
+    try
+    {
     var username = ctx.message.from.username.toLowerCase();
     if(params.length > 0)
     {
@@ -193,6 +197,11 @@ function showPortfolio(ctx, params)
             else
             {
                 var currentPrice = prices.getStockPrice(currentAsset.name).toFixed(2);
+                if(currentAsset.amount == null || currentAsset.originalPrice == null)
+                {
+                    console.log("bad data")
+                    return;
+                }
                 var assetValue = (currentAsset.amount * currentPrice).toFixed(2);
                 output += "~~~~" + currentAsset.name + ":~~~~\nShares: " + currentAsset.amount + "\nPrice: $" + currentPrice + "\nAverage Purchase Price: $" + currentAsset.originalPrice.toFixed(2) +"\n";
                 output += "Average percentage change since purchase: " + (((currentPrice/ currentAsset.originalPrice)-1) * 100).toFixed(2) + "%\n";
@@ -203,6 +212,11 @@ function showPortfolio(ctx, params)
     }
     
     ctx.reply(output);
+    }
+    catch(e)
+    {
+        ctx.reply("ERROR IN showPortfolio: " + e.stack)
+    }
 }
 
 function showQuote(ctx, params)
@@ -431,6 +445,8 @@ function sellStockCallBack(ctx, name, amount, price)
 }
 
 function showScores(ctx){
+    try
+    {
     var toReturn = "CURRENT STANDINGS: \n";
     
     var usernameToScoreArray = new Array();
@@ -452,6 +468,11 @@ function showScores(ctx){
     });
     
     ctx.reply(toReturn);
+    }
+    catch(e)
+    {
+        ctx.reply("ERROR IN showScores: " + e.stack)
+    }
 }
 
 function joinAutomatically(username)
@@ -506,56 +527,68 @@ function writeData()
 
 function checkForDayEndOrStart()
 {
-    if(currentlyAfterHours == assetDef.StockMarketOpen())
+    var stocksToGrab = getListOfAllStocks();
+    console.log("Market currently open: " + assetDef.StockMarketOpen());
+    try
     {
-        var stocksToGrab = getListOfAllStocks();
-        prices.refreshAllWithCallback(dayToggleCallback,stocksToGrab);
+        prices.refreshAllWithCallback((marketCurrentlyOpen != assetDef.StockMarketOpen()) ? dayToggleCallback: null ,stocksToGrab);
+    }
+    catch(e)
+    {
+        console.log("ERROR 539: " + e.stack);
     }
 }
 
 function dayToggleCallback()
 {
-    currentlyAfterHours = !assetDef.StockMarketOpen();
-    var toReturn = "";
-    if(currentlyAfterHours)
+    try
     {
-        toReturn += "END OF DAY REPORT: \n"
-    }
-    else
-    {
-        toReturn += "START OF DAY REPORT: \n"
-    }
-    
-    toReturn += "PERCENT CHANGES SINCE LAST REPORT: \n"
-    
-    
-    var usernameToPercentChangeArray = new Array();
-    var newPreviousScores = {};
-    
-    Object.keys(stockMap).forEach(function(k)
-    {
-        var currentScore = parseFloat(getPortfolioValueByUsername(k.toLowerCase()));
-        newPreviousScores[k] = currentScore;
-        var obj = {username:k, score:parseFloat((((currentScore/ previousPortfolioLevels[k])-1) * 100).toFixed(2))};
-        if((parseFloat(currentScore) != parseFloat(100000)))
+        marketCurrentlyOpen = assetDef.StockMarketOpen();
+        var toReturn = "";
+        if(marketCurrentlyOpen)
         {
-            usernameToPercentChangeArray.push(obj);
+            toReturn += "START OF DAY REPORT: \n"
         }
-    });
-    
-    usernameToPercentChangeArray.sort(function(a, b){return parseFloat(b.score) - parseFloat(a.score)});
-    
-    usernameToPercentChangeArray.forEach(function(newObj)
+        else
+        {
+            toReturn += "END OF DAY REPORT: \n"
+        }
+        
+        toReturn += "PERCENT CHANGES SINCE LAST REPORT: \n"
+        
+        
+        var usernameToPercentChangeArray = new Array();
+        var newPreviousScores = {};
+        
+        Object.keys(stockMap).forEach(function(k)
+        {
+            var currentScore = parseFloat(getPortfolioValueByUsername(k.toLowerCase()));
+            newPreviousScores[k] = currentScore;
+            var obj = {username:k, score:parseFloat((((currentScore/ previousPortfolioLevels[k])-1) * 100).toFixed(2))};
+            if((parseFloat(currentScore) != parseFloat(100000)))
+            {
+                usernameToPercentChangeArray.push(obj);
+            }
+        });
+        
+        usernameToPercentChangeArray.sort(function(a, b){return parseFloat(b.score) - parseFloat(a.score)});
+        
+        usernameToPercentChangeArray.forEach(function(newObj)
+        {
+            toReturn+= newObj.username + ": " + newObj.score.toFixed(2) + "%\n";    
+        });
+        
+        previousPortfolioLevels = newPreviousScores;
+        spareCtx.telegram.sendMessage(homeChatID, toReturn);
+        
+        if(!marketCurrentlyOpen)
+        {
+            showScores(spareCtx);
+        }
+    }
+    catch(e)
     {
-        toReturn+= newObj.username + ": " + newObj.score.toFixed(2) + "%\n";    
-    });
-    
-    previousPortfolioLevels = newPreviousScores;
-    spareCtx.telegram.sendMessage(homeChatID, toReturn);
-    
-    if(currentlyAfterHours)
-    {
-        showScores(spareCtx);
+        ctx.reply("ERROR IN dayToggleCallback: " + e.stack)
     }
 }
 
@@ -571,7 +604,7 @@ function startupBot()
 {
     bot.startPolling();
     loadBackupData();
-    currentlyAfterHours = !assetDef.StockMarketOpen();
+    marketCurrentlyOpen = assetDef.StockMarketOpen();
     setInterval(checkForDayEndOrStart, dayCheckTimer, "");
     console.log("STARTUP SUCCESSFUL");
 }
@@ -604,8 +637,15 @@ function readInAllStocks()
     
     featureRequests = JSON.parse(fs.readFileSync("./" + FRlocation));
     
-    prices = new PriceCache();
-    prices.refreshAllWithCallback(startupBot,stocksToGrab);
+    prices = new PriceCache(apiKey);
+    try
+    {
+        prices.refreshAllWithCallback(startupBot,stocksToGrab);
+    }
+    catch(e)
+    {
+        console.log("ERROR 648: " + e.stack);
+    }
 }
 
 readInAllStocks();
