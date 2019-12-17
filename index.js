@@ -234,6 +234,12 @@ function showQuoteCallBack(ctx, name, amount, price)
         ctx.reply(name + " is not a valid stock to get a quote for." );
         return;
     }
+
+    if(price == -2)
+    {
+        ctx.reply(name + " data cannot be fetched for some reason." );
+        return;
+    }
     
     ctx.reply("Current market price for " + name + ": " +  price);
     writeData();
@@ -535,7 +541,7 @@ function checkForDayEndOrStart()
     }
     catch(e)
     {
-        console.log("ERROR 539: " + e.stack);
+        console.log("ERROR in refreshallwithcallback: " + e.stack);
     }
 }
 
@@ -588,7 +594,7 @@ function dayToggleCallback()
     }
     catch(e)
     {
-        ctx.reply("ERROR IN dayToggleCallback: " + e.stack)
+        console.log("ERROR in dayToggleCallback: " + e.stack);
     }
 }
 
@@ -625,7 +631,6 @@ function getListOfAllStocks()
             }
         }); 
     });
-    
     return stocksToGrab;
 }
 
@@ -644,7 +649,7 @@ function readInAllStocks()
     }
     catch(e)
     {
-        console.log("ERROR 648: " + e.stack);
+        console.log("ERROR in readinallstocks: " + e.stack);
     }
 }
 

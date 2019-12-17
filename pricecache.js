@@ -1,9 +1,9 @@
 const get = require('simple-get');
 const asset = require('./asset.js')
 var assetPriceMap = new Map();
-var updateTimeout = 300* 1000 ; //update every 5 minutes
+var updateTimeout = 300* 1000 ; // update every 5 minutes
 var assetAPIKey=  ""
-var stocksPerQuery = 15;
+var stocksPerQuery = 200;
 var futures;
 class PriceCache{
     constructor(apiKey) 
@@ -20,6 +20,14 @@ function sleep(milliseconds) {
       break;
     }
   }
+}
+
+function printErrorData(data)
+{
+    if(data) 
+    {
+        console.log("DATA FOUND FOR ERROR: " + data.toString())
+    }
 }
 
 PriceCache.prototype.refreshAllWithCallback = function(functionCallback, stocksToGrab)
@@ -52,7 +60,7 @@ PriceCache.prototype.refreshAllWithCallback = function(functionCallback, stocksT
                     curQueryStr += ",";
                 }
             }
-            
+
             get.concat(getStockRetrievalUrl(curQueryStr), function (err, res, data) {
               if (err)
               {
@@ -60,11 +68,23 @@ PriceCache.prototype.refreshAllWithCallback = function(functionCallback, stocksT
               }
               else
               {
-                  var mainObj = JSON.parse(data.toString());
+                  var mainObj = ""
+                  try
+                  {
+                    mainObj = JSON.parse(data.toString());
+                  }
+                  catch(e)
+                  {
+                    console.log("Error on parsing return data. " + e.stack)
+                    printErrorData(data)
+                    futures--;
+                    return;
+                  }
+
                   var stockQuotes = mainObj['Stock Quotes'];
                   if(stockQuotes == undefined)
                   {
-                      console.log("probable overload")
+                      console.log("probable overload, stock quotes not found")
                       futures--;
                       return;
                   }
@@ -81,9 +101,17 @@ PriceCache.prototype.refreshAllWithCallback = function(functionCallback, stocksT
             });
         }
         
-        var timeout = function(){
-            setTimeout(function () {
-                console.log("futures: " + futures);
+        var timeout = function(secondMax){
+            if(secondMax == 0)
+            {
+                console.log("TIMED OUT at number of futures: " + futures);
+                if(functionCallback)
+                {
+                    functionCallback();
+                }
+            }
+            setTimeout(function (secondMax) {
+                
                 if(futures == 0)
                 {
                     if(functionCallback)
@@ -93,11 +121,11 @@ PriceCache.prototype.refreshAllWithCallback = function(functionCallback, stocksT
                 }
                 else
                 {
-                    timeout();
+                    timeout(secondMax-1);
                 }
             }, 100);
         }
-        timeout();
+        timeout(600);
     }
     catch(e)
     {
@@ -126,7 +154,7 @@ PriceCache.prototype.getStockPrice = function(stockName)
     }
     else
     {
-        console.log("oops on getStockPrice: " + stockName)
+        console.log("Error on getStockPrice: " + stockName)
         return 0;
     }
 };
@@ -151,18 +179,61 @@ PriceCache.prototype.getStockWithCallback = function(functionCallback,ctx,name,a
               }
               else
               {
-                  var mainObj = JSON.parse(data.toString());
-                  var stockQuotes = mainObj['Stock Quotes'];
+                 var mainObj = ""
+                 try
+                 {
+                     mainObj = JSON.parse(data.toString());
+                 }
+                 catch(e)
+                 {
+                    console.log("Error on parsing return data in getStockWithCallback. " + e.stack)
+                    printErrorData(data)
+                    functionCallback(ctx,name,amount,-2);
+                    return;
+                 }
+                 var stockQuotes = mainObj['Stock Quotes'];
+                 if(stockQuotes == undefined)
+                 {
+                      console.log("stock quotes undefined for some reason (maybe overload")
+                      printErrorData(data)
+                      functionCallback(ctx,name,amount,-2);
+                      return;
+                 }
+
+                 if(stockQuotes.length == 0)
+                 {
+                    functionCallback(ctx,name,amount,-1);
+                    return;
+                 }
+
                   for(var k = 0 ; k <stockQuotes.length; k++)
                   {
-                      var stockName= stockQuotes[k]['1. symbol'];
-                      var stockPrice = parseFloat(stockQuotes[k]['2. price'])
+                      var currentStock = stockQuotes[k];
+                      if(currentStock == undefined)
+                      {
+                        console.log("stock data weird for some reason (maybe overload")
+                        printErrorData(data)
+                        functionCallback(ctx,name,amount,-2);
+                        return;
+                      }
+                      var stockName= currentStock['1. symbol'];
+                      var stockPrice = parseFloat(currentStock['2. price'])
+
+                      if(stockName == undefined || stockPrice == NaN)
+                      {
+                        console.log("stock data elements weird for some reason (maybe overload")
+                        printErrorData(data)
+                        functionCallback(ctx,name,amount,-2);
+                        return;
+                      }
+
                       assetPriceMap.set(name,new asset.Asset(asset.AssetType.STOCK, name ,stockPrice, stockPrice));
                       if(functionCallback)
                       {
-                        functionCallback(ctx,name,amount,assetPriceMap.get(name).stockPrice);
+                        functionCallback(ctx,name,amount,assetPriceMap.get(name).amount);
                       }
                   }
+
               }
             });
         }
