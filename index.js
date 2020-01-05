@@ -18,14 +18,15 @@ var dayCheckTimer = 300 * 1000 ; //update every 30 seconds
 var marketCurrentlyOpen = true;
 var previousPortfolioLevels = {};
 var spareCtx;
+var configObj;
 
 function readInArgs()
 {
-    var configObj = JSON.parse(fs.readFileSync("./" + configLoc));
+    configObj = JSON.parse(fs.readFileSync("./" + configLoc));
     bot = new Telegraf(configObj.authToken)
-    dbLocation = configObj.dbLocation;
+    dbLocation = configObj.inTesting? configObj.dbTestLocation : configObj.dbLocation;
     FRlocation = configObj.frLocation;
-    homeChatID = configObj.homeChatID;
+    homeChatID = configObj.inTesting? configObj.testHomeChatID : configObj.homeChatID;
     apiKey = configObj.apiKey;
     adminID = configObj.adminID;
 }
@@ -40,6 +41,12 @@ bot.on('text', (ctx) => {
         console.log("NO USERNAME");
         return;
     }
+    
+    if(msg.chat.type != "private" && homeChatID != msg.chat.id) // only process commands from the chat we are currently listening to
+    {
+        return;
+    }
+    
     var username = msg.from.username.toLowerCase();
     var msgText = msg.text;
     joinAutomatically(username);
@@ -49,6 +56,9 @@ bot.on('text', (ctx) => {
         case "/addfeaturerequest":
         case "/afr":
             addFeatureRequest(ctx,restOfStuff);
+        break;
+        case "/eod":
+            fakeEndOfDay(ctx);
         break;
         case "/featurerequests":
             showFeatureRequests(ctx,restOfStuff);
@@ -108,15 +118,7 @@ function giveCash(ctx, params)
     var username = params[0];
     var cashAmount = parseFloat(params[1]);
     
-    var cashIndex = -1;
-    for(var i = 0; i < stockMap[username].length; i++)
-    {
-        if(stockMap[username][i].assetType == assetDef.AssetType.CASH)
-        {
-            cashIndex = i;
-            break;
-        }
-    }
+    var cashIndex = getCashIndexByUsername(username);
     
     stockMap[username][cashIndex].amount = +parseFloat(stockMap[username][cashIndex].amount.toFixed(2)) + +parseFloat(cashAmount);
     console.log(cashAmount + " given to " + username + " successfully.")
@@ -307,15 +309,7 @@ function buyStockCallBack(ctx, name, amount, price)
     
     var username = ctx.message.from.username.toLowerCase();
     
-    var cashIndex = -1;
-    for(var i = 0; i < stockMap[username].length; i++)
-    {
-        if(stockMap[username][i].assetType == assetDef.AssetType.CASH)
-        {
-            cashIndex = i;
-            break;
-        }
-    }
+    var cashIndex = getCashIndexByUsername(username);
     
     if(parseFloat(price * amount) > parseFloat(stockMap[username][cashIndex].amount))
     {
@@ -402,15 +396,7 @@ function sellStockCallBack(ctx, name, amount, price)
     
     var username = ctx.message.from.username.toLowerCase();
     
-    var cashIndex = -1;
-    for(var i = 0; i < stockMap[username].length; i++)
-    {
-        if(stockMap[username][i].assetType == assetDef.AssetType.CASH)
-        {
-            cashIndex = i;
-            break;
-        }
-    }
+    var cashIndex = getCashIndexByUsername(username);
     
     var assetIndex = -1;
     for(var i = 0; i< stockMap[username].length; i++)
@@ -531,13 +517,30 @@ function writeData()
     fs.writeFileSync(FRlocation, JSON.stringify(featureRequests));  
 }
 
+function getCashIndexByUsername(username)
+{
+    var cashIndex = -1;
+    for(var i = 0; i < stockMap[username].length; i++)
+    {
+        if(stockMap[username][i].assetType == assetDef.AssetType.CASH)
+        {
+            cashIndex = i;
+            break;
+        }
+    }
+    return cashIndex;
+}
+
 function checkForDayEndOrStart()
 {
     var stocksToGrab = getListOfAllStocks();
     console.log("Market currently open: " + assetDef.StockMarketOpen());
     try
     {
-        prices.refreshAllWithCallback((marketCurrentlyOpen != assetDef.StockMarketOpen()) ? dayToggleCallback: null ,stocksToGrab);
+        if(marketCurrentlyOpen)
+        {
+            prices.refreshAllWithCallback((marketCurrentlyOpen != assetDef.StockMarketOpen()) ? dayToggleCallback: null ,stocksToGrab);
+        }
     }
     catch(e)
     {
@@ -551,6 +554,52 @@ function dayToggleCallback()
     {
         marketCurrentlyOpen = assetDef.StockMarketOpen();
         var toReturn = "";
+        if(!marketCurrentlyOpen)
+        {
+            var divMap = prices.getAndClearCachedDividendObjects();
+            var d = new Date();
+            d.setHours(d.getHours() - 8); // i'm running this in california so subtract from UTC
+            var currentDate = d.toISOString().substring(0, 10);
+            Object.keys(stockMap).forEach(function(username)
+            {
+                var divAddObjects = new Array();
+                var divRemoveIndices = new Array();
+                for(var i = 0; i< stockMap[username].length; i++)
+                {
+                    if(stockMap[username][i].assetType == assetDef.AssetType.STOCK)
+                    {
+                        var assetName = stockMap[username][i].name.toUpperCase();
+                        if(divMap.has(assetName))
+                        {
+                            var divData = divMap.get(assetName);
+                            divAddObjects.push(new assetDef.UpcomingDividend(assetName,divData.amount * stockMap[username][i].amount,divData.exDivDate, divData.divReceiveDate));
+                        }
+                    }
+                    else if(stockMap[username][i].assetType == assetDef.AssetType.UPCOMING_DIVIDEND && stockMap[username][i].divReceiveDate == currentDate)
+                    {
+                        divRemoveIndices.push(i);
+                    }
+                }
+                
+                for(var i = divRemoveIndices.length -1; i >=0; i--)
+                {
+                    var divCashIn = stockMap[username][divRemoveIndices[i]];
+                    var cashIndex = getCashIndexByUsername(username);
+                    stockMap[username][cashIndex].amount += divCashIn.amount;
+                    spareCtx.telegram.sendMessage(homeChatID, username + " got $" + divCashIn.amount + " from dividends of " + divCashIn.name + " stock!");
+                    stockMap[username].splice(divRemoveIndices[i], 1);
+                }
+                
+                for(var i = 0; i < divAddObjects.length; i++)
+                {
+                    stockMap[username].push(divAddObjects[i]);
+                    spareCtx.telegram.sendMessage(homeChatID, username + " held " + divAddObjects[i].name + " stock during an ex-dividend date! The stonk gods smile upon them and they will receive dividend money soon!");
+                }
+            });
+            
+             prices.refreshAllDividendsWithCallback(null,getListOfAllStocks());
+        }
+        
         if(marketCurrentlyOpen)
         {
             toReturn += "START OF DAY REPORT: \n"
@@ -642,15 +691,39 @@ function readInAllStocks()
     
     featureRequests = JSON.parse(fs.readFileSync("./" + FRlocation));
     
-    prices = new PriceCache(apiKey);
+    prices = new PriceCache(apiKey, configObj.divKey, configObj.testDivKey, configObj.inTesting);
     try
     {
-        prices.refreshAllWithCallback(startupBot,stocksToGrab);
+        prices.refreshAllWithCallback(readInAllDividends,stocksToGrab);
     }
     catch(e)
     {
         console.log("ERROR in readinallstocks: " + e.stack);
     }
+}
+
+function readInAllDividends()
+{
+    console.log("Stock data retrieval complete. Retrieving dividend data...");
+    var stocksToGrab = getListOfAllStocks();
+    try
+    {
+        prices.refreshAllDividendsWithCallback(startupBot,stocksToGrab);
+    }
+    catch(e)
+    {
+        console.log("ERROR in processDividends: " + e.stack);
+    }
+}
+
+function fakeEndOfDay(ctx)
+{
+    if(!sentFromAdmin(ctx) || !configObj.inTesting){
+        console.log("NOT WORKING");
+        return;
+    }
+    marketCurrentlyOpen = false; // i'm only ever working on this when the stock market isn't open 
+    dayToggleCallback();
 }
 
 readInAllStocks();

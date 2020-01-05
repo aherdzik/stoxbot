@@ -2,7 +2,8 @@ var AssetType = Object.freeze({
     "CASH" : 1,
     "STOCK" : 2,
     "OPTION" : 3,
-    "CRYPTO" : 4
+    "CRYPTO" : 4,
+    "UPCOMING_DIVIDEND" : 5
 });
 
 class Asset 
@@ -13,7 +14,18 @@ class Asset
     this.amount = amount;
     this.originalPrice = originalPrice;
   }
-}
+};
+
+class UpcomingDividend
+{
+   constructor(name, amount, exDivDate, divReceiveDate) {
+    this.exDivDate = exDivDate;
+    this.name = name;
+    this.amount = amount;
+    this.divReceiveDate = divReceiveDate;
+    this.assetType = AssetType.UPCOMING_DIVIDEND;
+  }
+};
 
 isStockMarketOpen = function()
 {
@@ -38,5 +50,6 @@ isStockMarketOpen = function()
 };
 
 module.exports.Asset = Asset;
+module.exports.UpcomingDividend = UpcomingDividend;
 module.exports.AssetType = AssetType;
 module.exports.StockMarketOpen = isStockMarketOpen;
