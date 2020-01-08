@@ -93,6 +93,10 @@ bot.on('text', (ctx) => {
         case "/sayspec":
             sayToChat(ctx, restOfStuff);
         break;
+        case "/sod":
+            fakeStartOfDay(ctx);
+        break;
+        
         default:
             if(splitStr[0].startsWith("/"))
             {
@@ -537,10 +541,7 @@ function checkForDayEndOrStart()
     console.log("Market currently open: " + assetDef.StockMarketOpen());
     try
     {
-        if(marketCurrentlyOpen)
-        {
-            prices.refreshAllWithCallback((marketCurrentlyOpen != assetDef.StockMarketOpen()) ? dayToggleCallback: null ,stocksToGrab);
-        }
+        prices.refreshAllWithCallback((marketCurrentlyOpen != assetDef.StockMarketOpen()) ? dayToggleCallback: null ,stocksToGrab);
     }
     catch(e)
     {
@@ -552,7 +553,6 @@ function dayToggleCallback()
 {
     try
     {
-        marketCurrentlyOpen = assetDef.StockMarketOpen();
         var toReturn = "";
         if(!marketCurrentlyOpen)
         {
@@ -640,10 +640,13 @@ function dayToggleCallback()
         {
             showScores(spareCtx);
         }
+        
+        marketCurrentlyOpen = assetDef.StockMarketOpen();
     }
     catch(e)
     {
         console.log("ERROR in dayToggleCallback: " + e.stack);
+        spareCtx.telegram.sendMessage("ERROR in dayToggleCallback: " + e.stack);
     }
 }
 
@@ -718,11 +721,21 @@ function readInAllDividends()
 
 function fakeEndOfDay(ctx)
 {
-    if(!sentFromAdmin(ctx) || !configObj.inTesting){
+    if(!sentFromAdmin(ctx)){
         console.log("NOT WORKING");
         return;
     }
     marketCurrentlyOpen = false; // i'm only ever working on this when the stock market isn't open 
+    dayToggleCallback();
+}
+
+function fakeStartOfDay(ctx)
+{
+    if(!sentFromAdmin(ctx)){
+        console.log("NOT WORKING");
+        return;
+    }
+    marketCurrentlyOpen = true; // i'm only ever working on this when the stock market isn't open 
     dayToggleCallback();
 }
 

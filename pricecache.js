@@ -17,7 +17,6 @@ class PriceCache{
         assetAPIKey = apiKey;
         inTesting = useTestDivData;
         setInterval(this.updateCache, updateTimeout, "");
-        //dividendDataMap.set("YUM", new asset.UpcomingDividend("YUM",parseFloat("0.98"),"2020-01-05", "2020-05-07"));
     }
 };
 
